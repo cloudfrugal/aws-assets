@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFrugal - S3 Read-Only Optimization Role. Enables storage audits, lifecycle analysis, and cost optimization without reading data payloads.'
+
+Parameters:
+  CloudFrugalAccountId:
+    Type: String
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: 'Must be a valid 12-digit AWS Account ID.'
+    Description: 'The CloudFrugal AWS Account ID authorized to assume this role.'
+
+  ExternalId:
+    Type: String
+    MinLength: 8
+    Description: 'Unique External ID provided by CloudFrugal to prevent the Confused Deputy problem.'
+
+  RoleName:
+    Type: String
+    Default: 'CloudFrugalS3ReadOnlyRole'
+    Description: 'Name of the IAM Role created for CloudFrugal.'
+
+Resources:
+  CloudFrugalS3ReadOnlyRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Ref RoleName
+      Description: 'Allows CloudFrugal to inspect S3 storage configurations, lifecycle policies, and tiering metrics'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::\${CloudFrugalAccountId}:root'
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Ref ExternalId
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+      Policies:
+        - PolicyName: 'CloudFrugalLeastPrivilegeS3Audit'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: 'S3MetadataAndMetricsRead'
+                Effect: Allow
+                Action:
+                  - 's3:ListAllMyBuckets'
+                  - 's3:ListBucket'
+                  - 's3:GetBucketLocation'
+                  - 's3:GetLifecycleConfiguration'
+                  - 's3:GetBucketTagging'
+                  - 's3:GetBucketVersioning'
+                  - 's3:GetBucketAcl'
+                  - 's3:GetBucketPolicy'
+                  - 's3:GetBucketPolicyStatus'
+                  - 's3:GetEncryptionConfiguration'
+                  - 's3:GetBucketPublicAccessBlock'
+                  - 's3:GetBucketIntelligentTieringConfiguration'
+                  - 's3:GetAnalyticsConfiguration'
+                  - 's3:GetMetricsConfiguration'
+                  - 's3:GetInventoryConfiguration'
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: 'The ARN of the IAM Role created for CloudFrugal'
+    Value: !GetAtt CloudFrugalS3ReadOnlyRole.Arn
+    Export:
+      Name: !Sub '\${AWS::StackName}-RoleArn'
