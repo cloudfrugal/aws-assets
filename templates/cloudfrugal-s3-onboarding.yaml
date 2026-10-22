@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CloudFrugal - S3 Read-Only Optimization Role. Enables storage audits, lifecycle analysis, and cost optimization without reading data payloads.'
+Description: 'CloudFrugal - Provisions both the IAM Role and S3 Read-Only Policy for storage frugality audits.'
 
 Parameters:
   CloudFrugalAccountId:
@@ -19,15 +19,46 @@ Parameters:
     Description: 'Name of the IAM Role created for CloudFrugal.'
 
 Resources:
+  # 1. First-class IAM Managed Policy for S3 Read-Only Metadata Inspection
+  CloudFrugalS3ReadOnlyPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub '\${RoleName}-Policy'
+      Description: 'Least-privilege policy allowing CloudFrugal to inspect S3 bucket configurations, lifecycle rules, and tiering metrics'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'S3MetadataAndMetricsRead'
+            Effect: Allow
+            Action:
+              - 's3:ListAllMyBuckets'
+              - 's3:ListBucket'
+              - 's3:GetBucketLocation'
+              - 's3:GetLifecycleConfiguration'
+              - 's3:GetBucketTagging'
+              - 's3:GetBucketVersioning'
+              - 's3:GetBucketAcl'
+              - 's3:GetBucketPolicy'
+              - 's3:GetBucketPolicyStatus'
+              - 's3:GetEncryptionConfiguration'
+              - 's3:GetBucketPublicAccessBlock'
+              - 's3:GetBucketIntelligentTieringConfiguration'
+              - 's3:GetAnalyticsConfiguration'
+              - 's3:GetMetricsConfiguration'
+              - 's3:GetInventoryConfiguration'
+            Resource: '*'
+
+  # 2. IAM Role with STS Trust Relationship Policy attached
   CloudFrugalS3ReadOnlyRole:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: !Ref RoleName
-      Description: 'Allows CloudFrugal to inspect S3 storage configurations, lifecycle policies, and tiering metrics'
+      Description: 'Allows CloudFrugal to assume role and audit S3 storage frugality'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: Allow
+          - Sid: 'CloudFrugalAssumeRoleTrustPolicy'
+            Effect: Allow
             Principal:
               AWS: !Sub 'arn:aws:iam::\${CloudFrugalAccountId}:root'
             Action: 'sts:AssumeRole'
@@ -36,30 +67,7 @@ Resources:
                 'sts:ExternalId': !Ref ExternalId
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-      Policies:
-        - PolicyName: 'CloudFrugalLeastPrivilegeS3Audit'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Sid: 'S3MetadataAndMetricsRead'
-                Effect: Allow
-                Action:
-                  - 's3:ListAllMyBuckets'
-                  - 's3:ListBucket'
-                  - 's3:GetBucketLocation'
-                  - 's3:GetLifecycleConfiguration'
-                  - 's3:GetBucketTagging'
-                  - 's3:GetBucketVersioning'
-                  - 's3:GetBucketAcl'
-                  - 's3:GetBucketPolicy'
-                  - 's3:GetBucketPolicyStatus'
-                  - 's3:GetEncryptionConfiguration'
-                  - 's3:GetBucketPublicAccessBlock'
-                  - 's3:GetBucketIntelligentTieringConfiguration'
-                  - 's3:GetAnalyticsConfiguration'
-                  - 's3:GetMetricsConfiguration'
-                  - 's3:GetInventoryConfiguration'
-                Resource: '*'
+        - !Ref CloudFrugalS3ReadOnlyPolicy
 
 Outputs:
   RoleArn:
@@ -67,3 +75,13 @@ Outputs:
     Value: !GetAtt CloudFrugalS3ReadOnlyRole.Arn
     Export:
       Name: !Sub '\${AWS::StackName}-RoleArn'
+
+  PolicyArn:
+    Description: 'The ARN of the standalone S3 Read-Only Managed Policy'
+    Value: !Ref CloudFrugalS3ReadOnlyPolicy
+    Export:
+      Name: !Sub '\${AWS::StackName}-PolicyArn'
+
+  ExternalId:
+    Description: 'The External ID configured in the Trust Relationship'
+    Value: !Ref ExternalId
